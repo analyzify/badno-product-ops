@@ -1,0 +1,28 @@
+# Binary
+badops
+
+# Output files
+output/originals/
+output/resized/
+output/.badops-state.json
+output/report.json
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+inbox/
