@@ -134,15 +134,25 @@ type Supplier struct {
 
 // PackageInfo represents packaging information from NOBB
 type PackageInfo struct {
-	Type        string  `json:"type"`         // PIECE, INNER, OUTER, PALLET
-	Quantity    int     `json:"quantity"`
-	GTIN        string  `json:"gtin,omitempty"`
-	Weight      float64 `json:"weight,omitempty"`
-	WeightUnit  string  `json:"weight_unit,omitempty"`
-	Length      float64 `json:"length,omitempty"`
-	Width       float64 `json:"width,omitempty"`
-	Height      float64 `json:"height,omitempty"`
-	DimUnit     string  `json:"dim_unit,omitempty"`
+	Type            string  `json:"type"`                        // PIECE, INNER, OUTER, PALLET (class)
+	Quantity        int     `json:"quantity"`                    // Number of items
+	GTIN            string  `json:"gtin,omitempty"`              // Barcode
+	Weight          float64 `json:"weight,omitempty"`            // Weight in WeightUnit
+	WeightUnit      string  `json:"weight_unit,omitempty"`
+	Length          float64 `json:"length,omitempty"`            // Length in DimUnit
+	Width           float64 `json:"width,omitempty"`             // Width in DimUnit
+	Height          float64 `json:"height,omitempty"`            // Height in DimUnit
+	DimUnit         string  `json:"dim_unit,omitempty"`
+	Volume          float64 `json:"volume,omitempty"`            // Volume in liters
+	IsPCU           bool    `json:"is_pcu,omitempty"`            // Is Price Calculation Unit
+	MinOrderQty     int     `json:"min_order_qty,omitempty"`     // Minimum order quantity
+	Deliverable     bool    `json:"deliverable,omitempty"`       // Can be delivered
+	Stocked         bool    `json:"stocked,omitempty"`           // Is stocked
+	CalculatedCount float64 `json:"calculated_count,omitempty"`  // Calculated count
+	ConsistsOfCount float64 `json:"consists_of_count,omitempty"` // Number of items contained (float from API)
+	ConsistsOfUnit  string  `json:"consists_of_unit,omitempty"`  // Unit of contained items
+	DangerousGoods  bool    `json:"dangerous_goods,omitempty"`   // Contains dangerous goods
+	DGUNNumber      string  `json:"dgun_number,omitempty"`       // UN number for dangerous goods
 }
 
 // Enhancement represents a single enhancement action performed on a product

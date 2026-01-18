@@ -373,15 +373,36 @@ export NOBB_PASSWORD=mypass
 - Requires access token with `read_products` and `write_products` scopes
 - Supports pagination for large catalogs
 
-### NOBB API
-- Endpoint: `https://export.byggtjeneste.no/api`
+### NOBB API (Norwegian Building Products Database)
+- Endpoint: `https://export.byggtjeneste.no/api/v1`
 - Basic Auth authentication
-- Fetches: items, properties, suppliers, packages
+- **Data Extracted**:
+  - Product details (description, type, ETIM class)
+  - Physical specs (dimensions, weight)
+  - Images from CDN (product photos, documentation, assembly)
+  - ETIM properties (material, color, form, etc.)
+  - Environmental properties (BREEAM-NOR compliance)
+  - Suppliers (with article numbers, multiple per product)
+  - Packages (F-PAK, D-PAK with GTIN, volume, delivery status)
+  - Classifications (customs code, NRF info, country of origin)
+- See `docs/NOBB.md` for detailed documentation
 
 ### Tiger.nl
 - Web scraping with rate limiting (150ms default)
 - Image URLs: `https://tiger.nl/pim/528_{UUID}?width=1200&height=1200`
 - Results cached for 24 hours
+- See `docs/TIGER-NL.md` for detailed documentation
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| `CLAUDE.md` | Claude Code context and development reference |
+| `CHANGELOG.md` | Version history and release notes |
+| `docs/NOBB.md` | NOBB API integration details |
+| `docs/TIGER-NL.md` | Tiger.nl scraping documentation |
+| `docs/PROJECT.md` | Project overview and goals |
+| `docs/BRIEF.md` | Product brief and requirements |
 
 ## License
 

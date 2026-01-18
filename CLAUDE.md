@@ -4,7 +4,7 @@
 
 Multi-source product enhancement platform for Bad.no. Imports products from Shopify, enhances with data from NOBB and Tiger.nl, exports to multiple destinations.
 
-**Version**: 1.1.0
+**Version**: 1.2.0
 **Status**: Production Ready
 **Language**: Go 1.21+
 **Repository**: https://github.com/analyzify/badno-product-ops
@@ -139,20 +139,38 @@ type EnhancedProduct struct {
 
     // Pricing & Physical
     Price *Price
-    Dimensions *Dimensions
-    Weight *Weight
+    Dimensions *Dimensions  // Length, Width, Height in mm
+    Weight *Weight          // Value in kg
 
     // Media
-    Images []ProductImage
+    Images []ProductImage   // From Shopify, NOBB, Tiger.nl
 
     // From NOBB
-    Properties []Property
-    Suppliers []Supplier
-    PackageInfo []PackageInfo
+    Properties []Property   // ETIM, environmental, marketing properties
+    Suppliers []Supplier    // Multiple suppliers with article numbers
+    PackageInfo []PackageInfo // F-PAK, D-PAK with full details
+
+    // Specifications (key-value from various sources)
+    Specifications map[string]string
 
     // Tracking
     Enhancements []Enhancement
     Status ProductStatus  // pending, enhanced, approved, exported
+}
+
+// PackageInfo - Complete packaging data from NOBB
+type PackageInfo struct {
+    Type            string  // F-PAK, D-PAK, T-PAK, PAL
+    GTIN            string  // Barcode (GTIN-13)
+    Weight          float64 // Weight in kg
+    Length, Width, Height float64 // Dimensions in mm
+    Volume          float64 // Volume in liters
+    IsPCU           bool    // Is Price Calculation Unit
+    MinOrderQty     int     // Minimum order quantity
+    Deliverable     bool    // Can be delivered
+    Stocked         bool    // Is in stock
+    ConsistsOfCount float64 // Items per package
+    ConsistsOfUnit  string  // Unit (STK, etc.)
 }
 ```
 
@@ -361,16 +379,33 @@ config.Init()  // Creates default config
 - Auth: `X-Shopify-Access-Token` header
 - Endpoints: `/products.json`, `/products/{id}.json`
 
-### NOBB API
-- Base: `https://export.byggtjeneste.no/api`
-- Auth: Basic Auth
-- Pagination: `X-Forward-Token` header
-- Endpoints: `/items`, `/items/{nobb}/properties`, `/items/{nobb}/suppliers`
+### NOBB API (Norwegian Building Products Database)
+- Base: `https://export.byggtjeneste.no/api/v1`
+- Auth: Basic Auth (username/password)
+- Rate Limit: 200 requests per window
+- Endpoints:
+  - `/items?nobbnos={nobb}` - Search by NOBB number
+  - `/items?gtins={gtin}` - Search by GTIN/EAN
+  - `/items?search={query}` - Full-text search
+  - `/items/{nobb}/properties` - Get ETIM/environment properties
+  - `/items/{nobb}/suppliers` - Get supplier details
+
+**Data Extracted:**
+- Product details (description, type, ETIM class)
+- Physical specs (dimensions L×W×H in mm, weight in kg)
+- Images from CDN (`cdn.byggtjeneste.no/nobb/{guid}/square`)
+- Properties (ETIM technical, environmental, marketing, EPD)
+- Suppliers (with article numbers, multiple per product)
+- Packages (F-PAK, D-PAK with GTIN, volume, delivery status)
+- Classifications (customs code, NRF info, country of origin)
+
+See `docs/NOBB.md` for detailed integration documentation.
 
 ### Tiger.nl
 - Scraping with 150ms rate limit
 - Image URL: `https://tiger.nl/pim/528_{UUID}?width=1200&height=1200`
 - Cache: 24 hours (`output/.tiger-cache.json`)
+- See `docs/TIGER-NL.md` for detailed documentation
 
 ## Environment Variables
 

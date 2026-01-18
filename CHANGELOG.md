@@ -2,6 +2,86 @@
 
 All notable changes to the Bad.no Operations Terminal (badops) project.
 
+## [1.2.0] - 2026-01-18
+
+### Added
+
+#### Enhanced NOBB Connector - Complete Data Extraction
+
+Major update to the NOBB connector (`internal/source/nobb/connector.go`) to extract ALL available data from the NOBB API.
+
+**New Data Extracted:**
+
+- **Images/Media** - Product images, documentation, assembly instructions from NOBB CDN
+  - Media types: PB (Product Image), FDV (Documentation), MTG (Assembly), MB (Environment), TEG (Technical Drawing)
+  - URLs: `https://cdn.byggtjeneste.no/nobb/{guid}/square`
+
+- **ETIM Properties** - Full technical specifications
+  - Material, color, form, dimensions
+  - Mounting method, surface treatment
+  - All ETIM classification properties
+
+- **Environmental Properties** - Compliance and sustainability data
+  - BREEAM-NOR A20 2016 compliance
+  - BREEAM-NOR Hea 02 2016 (VOC emissions)
+  - EPD (Environmental Product Declaration) data
+
+- **Marketing Properties** - Product benefits and features
+  - Produktfordel 1, 2, 3... (Product benefits)
+  - Marketing descriptions
+
+- **Extended Package Information** - Complete logistics data
+  - Volume (liters)
+  - Minimum order quantity
+  - Deliverable status (per supplier)
+  - Stocked status (per supplier)
+  - Calculated count
+  - Consists of count/unit (items per package)
+  - Dangerous goods flag and UN number
+
+- **Additional Item Fields**
+  - Customs code (Norwegian and EU)
+  - ETIM class code
+  - Manufacturer item number
+  - NRF (Norwegian Retail Federation) info
+  - Digital channel text
+  - Country of origin
+
+**Model Updates:**
+
+- `PackageInfo` struct extended with 11 new fields:
+  - `Volume`, `IsPCU`, `MinOrderQty`, `Deliverable`, `Stocked`
+  - `CalculatedCount`, `ConsistsOfCount`, `ConsistsOfUnit`
+  - `DangerousGoods`, `DGUNNumber`
+
+- `nobbItem` struct updated for complete API response parsing:
+  - Properties now grouped by category (ETIM, Environment, Marketing, EPD, Other)
+  - Added NRF info struct
+  - Added customs codes (NO and EU)
+
+**Technical Improvements:**
+
+- Fixed JSON parsing for float fields (consistsOfCount, calculatedCount)
+- Added property category extraction (nobb_etim, nobb_env, nobb_marketing, nobb_epd, nobb_other)
+- Improved error messages with search method details
+- Added helper methods for properties group (IsEmpty, TotalCount)
+
+#### New Documentation
+
+- **`docs/NOBB.md`** - Comprehensive NOBB API integration documentation
+  - Complete API endpoint reference
+  - Response structure examples
+  - Media types and package classes
+  - Troubleshooting guide
+  - Best practices
+
+### Changed
+
+- CLAUDE.md updated with detailed NOBB connector information
+- Version bumped to 1.2.0
+
+---
+
 ## [1.0.0] - 2026-01-18
 
 ### Added
@@ -185,23 +265,26 @@ Complete rewrite as a multi-source product enhancement platform for Bad.no's ope
 
 ## Roadmap
 
-### Completed in 1.0.0
+### Completed in 1.2.0
 - [x] Rate limiting for Tiger.nl requests (configurable via config)
 - [x] `--dry-run` flag for enhance and export commands
 - [x] Config file support (~/.badops/config.yaml)
 - [x] Direct Shopify API integration (import and export)
 - [x] Support for additional suppliers (NOBB integration)
+- [x] Complete NOBB data extraction (images, properties, packages)
+- [x] NOBB API documentation
 
-### [1.1.0] - Planned
+### [1.3.0] - Planned
 - [ ] Retry logic with exponential backoff for failed downloads
 - [ ] Visual image deduplication (perceptual hashing)
 - [ ] Manual review queue for low-confidence matches
 - [ ] Better error handling and logging
-
-### [1.2.0] - Planned
 - [ ] Pipeline command for chained operations
+
+### [1.4.0] - Planned
 - [ ] Batch processing with job queues
 - [ ] Progress persistence for resumable operations
+- [ ] NOBB property mapping to Shopify metafields
 
 ### [2.0.0] - Future
 - [ ] Web UI for manual review
