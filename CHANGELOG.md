@@ -2,6 +2,118 @@
 
 All notable changes to the Bad.no Operations Terminal (badops) project.
 
+## [1.0.0] - 2026-01-18
+
+### Added
+
+#### Multi-Source Enhancement Platform
+Complete rewrite as a multi-source product enhancement platform for Bad.no's operations team.
+
+#### Source Connector Framework (`internal/source/`)
+- **Connector Interface** - Unified interface for data sources
+  - `connector.go` - Core interface definition with FetchProducts and EnhanceProduct
+  - `registry.go` - Global connector registry for plugin-style architecture
+- **Shopify Connector** (`shopify/connector.go`)
+  - Import products directly from Shopify Admin API 2024-01
+  - Filter by vendor, limit, or specific handles
+  - Full pagination support for large catalogs
+- **NOBB Connector** (`nobb/connector.go`)
+  - Enhance products with Norwegian building products data
+  - Fetches: items, properties, suppliers, packages
+  - Basic Auth authentication with pagination via X-Forward-Token
+- **Tiger.nl Connector** (`tiger/connector.go`)
+  - Wraps existing scraper for image enhancement
+  - Rate limiting support (configurable delay)
+  - Extracts high-resolution PIM images
+
+#### Output Adapter Framework (`internal/output/`)
+- **Adapter Interface** - Unified interface for export destinations
+  - `adapter.go` - Core interface with ExportProducts and format support
+  - `registry.go` - Global adapter registry
+- **File Adapters** (`file/`)
+  - `csv.go` - Matrixify-compatible and Shopify CSV formats
+  - `json.go` - JSON and JSONL export formats
+- **Shopify Adapter** (`shopify/adapter.go`)
+  - Direct product updates via Admin API
+  - Update images, metafields, and product data
+- **ClickHouse Adapter** (`clickhouse/adapter.go`)
+  - Data warehouse export for analytics
+  - Auto-creates products table if not exists
+
+#### New CLI Commands
+
+- **Configuration** (`cmd/badops/cmd/config.go`)
+  - `badops config init` - Initialize config file at ~/.badops/config.yaml
+  - `badops config show` - Display current configuration
+  - `badops config set <key> <value>` - Set config values
+  - `badops config get <key>` - Get specific config values
+
+- **Sources** (`cmd/badops/cmd/sources.go`)
+  - `badops sources list` - List available data sources
+  - `badops sources test <name>` - Test connection to a source
+  - `badops sources info <name>` - Show source details and capabilities
+
+- **Enhance** (`cmd/badops/cmd/enhance.go`)
+  - `badops enhance run --source <name>` - Enhance products from a source
+  - `badops enhance review` - Review pending enhancements
+  - `badops enhance apply` - Apply approved enhancements
+  - Supports `--dry-run` flag for preview
+
+- **Export** (`cmd/badops/cmd/export.go`)
+  - `badops export run --dest <dest>` - Export to destination
+  - `badops export list` - List available export destinations
+  - Supports formats: matrixify, shopify, json, jsonl
+  - Supports `--enhanced-only` and `--dry-run` flags
+
+- **Products** (enhanced `cmd/badops/cmd/products.go`)
+  - `badops products import --source shopify` - Import from Shopify
+  - `badops products list` - List products in state
+  - Existing parse, match, lookup commands preserved
+
+#### Enhanced Data Model (`pkg/models/product.go`)
+- **EnhancedProduct** struct with rich product data:
+  - Identity: ID, SKU, Handle, Barcode, NOBBNumber
+  - Content: Title, Description, Vendor, ProductType, Tags
+  - Pricing: Price struct with Amount and Currency
+  - Physical: Dimensions (L/W/H), Weight (Value/Unit)
+  - Media: ProductImage with source tracking
+  - Specifications: Key-value map for product specs
+  - Properties: Structured properties from NOBB
+  - Supply Chain: Suppliers and PackageInfo from NOBB
+  - Tracking: Enhancement history and status
+- **Conversion Methods**: ToEnhancedProduct() and ToLegacyProduct() for backward compatibility
+
+#### State Management (`internal/state/store.go`)
+- **V2 State Format** with automatic migration from v1
+- Product map indexed by SKU for fast lookups
+- Enhancement history tracking with timestamps
+- Thread-safe operations
+
+#### Configuration System (`internal/config/config.go`)
+- YAML-based configuration at `~/.badops/config.yaml`
+- Environment variable references for secrets
+- Configurable sources, outputs, and defaults
+
+#### Orchestrator (`internal/orchestrator/orchestrator.go`)
+- Pipeline coordinator for import → enhance → export flows
+- Multi-source enhancement in single pass
+- Unified error handling and progress reporting
+
+### Changed
+- State file upgraded to v2 format (auto-migrates from v1)
+- Products command now uses new state store
+- All image commands work with EnhancedProduct model
+
+### Dependencies Added
+- `gopkg.in/yaml.v3` - YAML configuration parsing
+
+### Backward Compatibility
+- All existing commands (`parse`, `match`, `images compare/fetch/resize`) continue to work
+- Legacy v1 state files automatically migrated on first load
+- Existing workflows fully supported
+
+---
+
 ## [0.2.0] - 2025-01-07
 
 ### Added
@@ -73,19 +185,26 @@ All notable changes to the Bad.no Operations Terminal (badops) project.
 
 ## Roadmap
 
-### [0.3.0] - Planned
-- [ ] Rate limiting for Tiger.nl requests
-- [ ] Retry logic for failed downloads
-- [ ] `--dry-run` flag for all commands
-- [ ] Better error handling and logging
+### Completed in 1.0.0
+- [x] Rate limiting for Tiger.nl requests (configurable via config)
+- [x] `--dry-run` flag for enhance and export commands
+- [x] Config file support (~/.badops/config.yaml)
+- [x] Direct Shopify API integration (import and export)
+- [x] Support for additional suppliers (NOBB integration)
 
-### [0.4.0] - Planned
+### [1.1.0] - Planned
+- [ ] Retry logic with exponential backoff for failed downloads
 - [ ] Visual image deduplication (perceptual hashing)
 - [ ] Manual review queue for low-confidence matches
-- [ ] Config file support (~/.badops.yaml)
+- [ ] Better error handling and logging
 
-### [1.0.0] - Future
-- [ ] Direct Shopify API integration
-- [ ] Support for additional suppliers
+### [1.2.0] - Planned
+- [ ] Pipeline command for chained operations
+- [ ] Batch processing with job queues
+- [ ] Progress persistence for resumable operations
+
+### [2.0.0] - Future
 - [ ] Web UI for manual review
 - [ ] Automated scheduling/cron support
+- [ ] Webhook notifications for completed jobs
+- [ ] Multi-tenant support
