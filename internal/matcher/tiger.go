@@ -10,7 +10,9 @@ import (
 
 // TigerMatcher matches products against Tiger.nl catalog
 type TigerMatcher struct {
-	catalog map[string]string
+	catalog   map[string]string
+	skuMapper *SKUMapper
+	scraper   *TigerScraper
 }
 
 // NewTigerMatcher creates a new Tiger.nl matcher
@@ -34,7 +36,11 @@ func NewTigerMatcher() *TigerMatcher {
 		"shower":    "https://www.tiger.nl/nl/badkameraccessoires/doucheaccessoires",
 	}
 
-	return &TigerMatcher{catalog: catalog}
+	return &TigerMatcher{
+		catalog:   catalog,
+		skuMapper: NewSKUMapper(),
+		scraper:   NewTigerScraper(),
+	}
 }
 
 // Match attempts to match a product against Tiger.nl
@@ -71,4 +77,46 @@ func (m *TigerMatcher) Match(product models.Product) (string, float64) {
 	}
 
 	return matchedURL, baseScore
+}
+
+// LookupBySKU attempts to find a product on Tiger.nl using the SKU
+// Returns the product info, list of valid image URLs, and error if any
+func (m *TigerMatcher) LookupBySKU(sku string, productName string) (*TigerProduct, error) {
+	// Check cache first
+	if cached, found := m.scraper.GetCached(sku); found {
+		return cached, nil
+	}
+
+	// Get candidate Tiger.nl IDs
+	candidateIDs := m.skuMapper.MapSKU(sku)
+
+	// Get the appropriate base path
+	basePath := m.skuMapper.GetCategoryPath(productName)
+
+	// Get product types to try
+	productTypes := m.skuMapper.GetProductTypes()
+
+	// Try each candidate ID
+	for _, tigerID := range candidateIDs {
+		product, err := m.scraper.FindProductByID(tigerID, basePath, productTypes)
+		if err == nil && product != nil {
+			// Cache the successful result
+			m.scraper.SetCached(sku, product)
+			return product, nil
+		}
+	}
+
+	// Cache the not-found result
+	m.scraper.SetCached(sku, nil)
+	return nil, nil
+}
+
+// GetSKUMapper returns the SKU mapper for direct access
+func (m *TigerMatcher) GetSKUMapper() *SKUMapper {
+	return m.skuMapper
+}
+
+// GetScraper returns the scraper for direct access
+func (m *TigerMatcher) GetScraper() *TigerScraper {
+	return m.scraper
 }

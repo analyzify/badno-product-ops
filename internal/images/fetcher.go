@@ -122,3 +122,30 @@ func formatSize(bytes int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
+
+// ValidateURL checks if a URL is accessible (returns HTTP 200)
+// This is useful for pre-validating image URLs before downloading
+func (f *Fetcher) ValidateURL(url string) (bool, error) {
+	resp, err := f.client.Head(url)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK, nil
+}
+
+// DownloadWithValidation downloads an image only if it passes validation
+func (f *Fetcher) DownloadWithValidation(url, sku string) (string, string, error) {
+	// First validate the URL
+	valid, err := f.ValidateURL(url)
+	if err != nil {
+		return "", "", fmt.Errorf("validation failed: %w", err)
+	}
+	if !valid {
+		return "", "", fmt.Errorf("URL returned non-200 status")
+	}
+
+	// Proceed with download
+	return f.Download(url, sku)
+}

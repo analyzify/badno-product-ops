@@ -29,4 +29,8 @@ func Execute() error {
 func init() {
 	rootCmd.AddCommand(productsCmd)
 	rootCmd.AddCommand(imagesCmd)
+	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(sourcesCmd)
+	rootCmd.AddCommand(enhanceCmd)
+	rootCmd.AddCommand(exportCmd)
 }

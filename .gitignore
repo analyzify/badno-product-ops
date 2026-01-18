@@ -1,11 +1,8 @@
 # Binary
-badops
+/badops
 
 # Output files
-output/originals/
-output/resized/
-output/.badops-state.json
-output/report.json
+/output/
 
 # Go
 *.exe

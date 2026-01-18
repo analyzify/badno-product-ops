@@ -186,8 +186,8 @@ func runFetchNewOnly() error {
 
 	color.Yellow("  Scanning %d products for new images...\n\n", len(products))
 
-	// Create scraper and fetcher
-	scraper := matcher.NewTigerScraper()
+	// Create matcher and fetcher (uses new SKU-based lookup)
+	tigerMatcher := matcher.NewTigerMatcher()
 	fetcher := images.NewFetcher()
 
 	// First pass: find all new images
@@ -200,7 +200,7 @@ func runFetchNewOnly() error {
 
 	// Progress bar for scanning
 	scanBar := progressbar.NewOptions(len(products),
-		progressbar.OptionSetDescription("  Scanning Tiger.nl"),
+		progressbar.OptionSetDescription("  Scanning Tiger.nl (ID-based)"),
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        color.CyanString("█"),
 			SaucerHead:    color.CyanString("█"),
@@ -214,8 +214,8 @@ func runFetchNewOnly() error {
 	for _, p := range products {
 		existingCount := len(p.ExistingImages)
 
-		// Find product on Tiger.nl
-		tigerProduct, err := scraper.FindProduct(p.Name)
+		// Find product on Tiger.nl using SKU-based lookup (new method)
+		tigerProduct, err := tigerMatcher.LookupBySKU(p.SKU, p.Name)
 		if err == nil && tigerProduct != nil {
 			// Skip first N images (already on bad.no), take the rest
 			for i, imgURL := range tigerProduct.ImageURLs {
@@ -464,12 +464,12 @@ func runCompare(cmd *cobra.Command, args []string) error {
 
 	color.Yellow("  Checking %d products...\n\n", len(products))
 
-	// Create scraper
-	scraper := matcher.NewTigerScraper()
+	// Create matcher (uses new SKU-based lookup)
+	tigerMatcher := matcher.NewTigerMatcher()
 
 	// Progress bar
 	bar := progressbar.NewOptions(len(products),
-		progressbar.OptionSetDescription("  Scanning Tiger.nl"),
+		progressbar.OptionSetDescription("  Scanning Tiger.nl (ID-based)"),
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        color.GreenString("█"),
 			SaucerHead:    color.GreenString("█"),
@@ -487,6 +487,7 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		tigerCount  int
 		newCount    int
 		tigerImages []string
+		tigerURL    string
 	}
 
 	var comparisons []comparison
@@ -495,14 +496,16 @@ func runCompare(cmd *cobra.Command, args []string) error {
 	for _, p := range products {
 		badnoCount := len(p.ExistingImages)
 
-		// Try to find product on Tiger.nl
+		// Try to find product on Tiger.nl using SKU-based lookup
 		tigerCount := 0
 		var tigerImages []string
+		var tigerURL string
 
-		tigerProduct, err := scraper.FindProduct(p.Name)
+		tigerProduct, err := tigerMatcher.LookupBySKU(p.SKU, p.Name)
 		if err == nil && tigerProduct != nil {
 			tigerCount = len(tigerProduct.ImageURLs)
 			tigerImages = tigerProduct.ImageURLs
+			tigerURL = tigerProduct.URL
 		}
 
 		newCount := 0
@@ -518,6 +521,7 @@ func runCompare(cmd *cobra.Command, args []string) error {
 			tigerCount:  tigerCount,
 			newCount:    newCount,
 			tigerImages: tigerImages,
+			tigerURL:    tigerURL,
 		})
 
 		bar.Add(1)
