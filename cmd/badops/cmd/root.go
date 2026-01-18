@@ -33,4 +33,8 @@ func init() {
 	rootCmd.AddCommand(sourcesCmd)
 	rootCmd.AddCommand(enhanceCmd)
 	rootCmd.AddCommand(exportCmd)
+	rootCmd.AddCommand(dbCmd)
+	rootCmd.AddCommand(pricesCmd)
+	rootCmd.AddCommand(competitorsCmd)
+	rootCmd.AddCommand(analyticsCmd)
 }

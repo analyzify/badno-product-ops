@@ -17,6 +17,7 @@ const (
 type Config struct {
 	Sources   SourcesConfig   `yaml:"sources"`
 	Outputs   OutputsConfig   `yaml:"outputs"`
+	Database  DatabaseConfig  `yaml:"database,omitempty"`
 	Defaults  DefaultsConfig  `yaml:"defaults,omitempty"`
 }
 
@@ -74,6 +75,33 @@ type FileOutputConfig struct {
 	Pretty    bool   `yaml:"pretty"`
 }
 
+// DatabaseConfig holds database connection settings
+type DatabaseConfig struct {
+	Postgres   PostgresConfig   `yaml:"postgres"`
+	ClickHouse ClickHouseDBConfig `yaml:"clickhouse"`
+	UseDB      bool             `yaml:"use_db"` // Enable database backend
+}
+
+// PostgresConfig holds PostgreSQL settings
+type PostgresConfig struct {
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	Database    string `yaml:"database"`
+	UsernameEnv string `yaml:"username_env"`
+	PasswordEnv string `yaml:"password_env"`
+	SSLMode     string `yaml:"ssl_mode"`
+}
+
+// ClickHouseDBConfig holds ClickHouse database settings for analytics
+type ClickHouseDBConfig struct {
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	Database    string `yaml:"database"`
+	UsernameEnv string `yaml:"username_env"`
+	PasswordEnv string `yaml:"password_env"`
+	Secure      bool   `yaml:"secure"`
+}
+
 // DefaultsConfig holds default settings
 type DefaultsConfig struct {
 	Vendor          string   `yaml:"vendor,omitempty"`           // Default vendor filter
@@ -113,6 +141,25 @@ func DefaultConfig() *Config {
 			File: FileOutputConfig{
 				OutputDir: "./output",
 				Pretty:    true,
+			},
+		},
+		Database: DatabaseConfig{
+			UseDB: false, // Disabled by default, use JSON state
+			Postgres: PostgresConfig{
+				Host:        "localhost",
+				Port:        5432,
+				Database:    "badops",
+				UsernameEnv: "POSTGRES_USER",
+				PasswordEnv: "POSTGRES_PASSWORD",
+				SSLMode:     "prefer",
+			},
+			ClickHouse: ClickHouseDBConfig{
+				Host:        "localhost",
+				Port:        9000,
+				Database:    "badops",
+				UsernameEnv: "CLICKHOUSE_USERNAME",
+				PasswordEnv: "CLICKHOUSE_PASSWORD",
+				Secure:      false,
 			},
 		},
 		Defaults: DefaultsConfig{
@@ -261,6 +308,20 @@ func Set(key, value string) error {
 		config.Defaults.Vendor = value
 	case "defaults.export_format":
 		config.Defaults.ExportFormat = value
+	case "database.use_db":
+		config.Database.UseDB = value == "true"
+	case "database.postgres.host":
+		config.Database.Postgres.Host = value
+	case "database.postgres.database":
+		config.Database.Postgres.Database = value
+	case "database.postgres.username_env":
+		config.Database.Postgres.UsernameEnv = value
+	case "database.postgres.password_env":
+		config.Database.Postgres.PasswordEnv = value
+	case "database.clickhouse.host":
+		config.Database.ClickHouse.Host = value
+	case "database.clickhouse.database":
+		config.Database.ClickHouse.Database = value
 	default:
 		return fmt.Errorf("unknown config key: %s", key)
 	}
@@ -290,6 +351,23 @@ func Get(key string) (string, error) {
 		return config.Defaults.Vendor, nil
 	case "defaults.export_format":
 		return config.Defaults.ExportFormat, nil
+	case "database.use_db":
+		if config.Database.UseDB {
+			return "true", nil
+		}
+		return "false", nil
+	case "database.postgres.host":
+		return config.Database.Postgres.Host, nil
+	case "database.postgres.database":
+		return config.Database.Postgres.Database, nil
+	case "database.postgres.username_env":
+		return config.Database.Postgres.UsernameEnv, nil
+	case "database.postgres.password_env":
+		return config.Database.Postgres.PasswordEnv, nil
+	case "database.clickhouse.host":
+		return config.Database.ClickHouse.Host, nil
+	case "database.clickhouse.database":
+		return config.Database.ClickHouse.Database, nil
 	default:
 		return "", fmt.Errorf("unknown config key: %s", key)
 	}
