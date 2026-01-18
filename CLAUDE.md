@@ -4,7 +4,7 @@
 
 Multi-source product enhancement platform for Bad.no. Imports products from Shopify, enhances with data from NOBB and Tiger.nl, exports to multiple destinations.
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Status**: Production Ready
 **Language**: Go 1.21+
 **Repository**: https://github.com/analyzify/badno-product-ops
@@ -20,6 +20,16 @@ export SHOPIFY_API_KEY=your_key
 ./badops products import --source shopify --vendor Tiger
 ./badops enhance run --source tiger_nl
 ./badops export run --dest csv --format matrixify
+
+# Database workflow (PostgreSQL + ClickHouse)
+export POSTGRES_USER=badops POSTGRES_PASSWORD=secret
+./badops db init                              # Create PostgreSQL schema
+./badops db migrate --from-state              # Import existing JSON state
+./badops prices import reprice-export.csv     # Import competitor prices
+./badops competitors stats                    # View competitor coverage
+./badops analytics init                       # Create ClickHouse schema
+./badops analytics sync --all                 # Sync to ClickHouse
+./badops analytics alerts --threshold 10     # Find pricing issues
 
 # Legacy workflow (CSV → Match → Fetch)
 ./badops products parse testdata/tiger-sample.csv
@@ -37,7 +47,11 @@ cmd/badops/cmd/
 ├── products.go   - import, parse, list, match, lookup
 ├── enhance.go    - run, review, apply
 ├── export.go     - run, list
-└── images.go     - compare, fetch, resize
+├── images.go     - compare, fetch, resize
+├── db.go         - db init|status|migrate
+├── prices.go     - prices import|check|summary
+├── competitors.go - competitors list|add|stats|remove
+└── analytics.go  - analytics init|sync|trends|position|alerts
 
 internal/
 ├── source/                      # Source Connector Framework
@@ -53,7 +67,23 @@ internal/
 │   ├── file/csv.go              - CSV (Matrixify/Shopify)
 │   ├── file/json.go             - JSON/JSONL
 │   ├── shopify/adapter.go       - Shopify API
-│   └── clickhouse/adapter.go    - ClickHouse
+│   └── clickhouse/adapter.go    - ClickHouse export
+│
+├── database/                    # Database Layer
+│   ├── repository.go            - Repository interfaces
+│   ├── postgres/
+│   │   ├── client.go            - Connection pool + migrations
+│   │   ├── products.go          - Product CRUD
+│   │   ├── competitors.go       - Competitors + price observations
+│   │   ├── history.go           - History, images, properties
+│   │   └── migrations/          - SQL migration files
+│   └── clickhouse/
+│       ├── client.go            - ClickHouse connection
+│       ├── analytics.go         - Analytics queries
+│       └── sync.go              - PG → CH sync
+│
+├── prices/                      # Price Tracking
+│   └── parser.go                - Reprice CSV parser
 │
 ├── state/store.go               - V2 state with migration
 ├── config/config.go             - YAML config (~/.badops/)
@@ -151,6 +181,95 @@ store.AddHistory("enhance", "tiger_nl", 10, "details")
 store.Save()
 ```
 
+## Database Architecture
+
+### Overview
+
+PostgreSQL serves as the primary database for master data, while ClickHouse handles time-series analytics for price history.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      BADOPS CLI                              │
+│  products | prices | competitors | analytics | db            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│  PostgreSQL   │    │  ClickHouse   │    │  File System  │
+│  (Primary DB) │───▶│  (Analytics)  │    │  (Images)     │
+├───────────────┤    ├───────────────┤    ├───────────────┤
+│ • products    │    │ • price_hist  │    │ • originals/  │
+│ • competitors │    │ • daily_mv    │    │ • resized/    │
+│ • prices_90d  │    │ • position_mv │    │ • exports/    │
+│ • images      │    │               │    │               │
+│ • properties  │    │               │    │               │
+└───────────────┘    └───────────────┘    └───────────────┘
+```
+
+### PostgreSQL Schema
+
+```sql
+-- Core tables
+products            -- 46K+ products with full EnhancedProduct mapping
+competitors         -- 29 tracked competitors
+competitor_products -- Product-competitor links (many-to-many)
+price_observations  -- Recent prices (partitioned, 90-day retention)
+product_images      -- Image metadata and paths
+product_properties  -- NOBB/Tiger properties
+suppliers           -- Supplier master data
+product_suppliers   -- Product-supplier links
+
+-- Audit tables
+enhancement_log     -- Per-product enhancement history
+operation_history   -- Global operation log
+```
+
+### ClickHouse Schema
+
+```sql
+-- Time-series table with 2-year TTL
+price_history (product_sku, competitor_name, price, observed_at)
+
+-- Materialized views for fast analytics
+price_daily_mv      -- Daily min/max/avg per product/competitor
+price_position_mv   -- Daily market position per product
+```
+
+### Repository Pattern (`internal/database/repository.go`)
+
+```go
+type ProductRepository interface {
+    Create(ctx, product) error
+    GetBySKU(ctx, sku) (*EnhancedProduct, error)
+    BulkUpsert(ctx, products) (int, error)
+    GetAll(ctx, opts QueryOptions) ([]*EnhancedProduct, error)
+    CountByVendor(ctx) (map[string]int64, error)
+}
+
+type PriceObservationRepository interface {
+    BulkCreate(ctx, observations) (int, error)
+    GetLatestByProduct(ctx, productID) ([]*PriceObservation, error)
+    GetPriceHistory(ctx, productID, days) ([]*PriceObservation, error)
+}
+```
+
+### Migration from JSON State
+
+```bash
+# 1. Initialize database
+badops db init
+
+# 2. Import existing state
+badops db migrate --from-state ./output/.badops-state.json
+
+# 3. Enable database backend
+badops config set database.use_db true
+
+# 4. Verify migration
+badops db status
+```
+
 ## Configuration
 
 ### Config File (`~/.badops/config.yaml`)
@@ -168,6 +287,22 @@ sources:
 outputs:
   file:
     output_dir: ./output
+
+database:
+  use_db: false  # Enable to use PostgreSQL instead of JSON state
+  postgres:
+    host: localhost
+    port: 5432
+    database: badops
+    username_env: POSTGRES_USER
+    password_env: POSTGRES_PASSWORD
+    ssl_mode: prefer
+  clickhouse:
+    host: localhost
+    port: 9000
+    database: badops
+    username_env: CLICKHOUSE_USERNAME
+    password_env: CLICKHOUSE_PASSWORD
 ```
 
 ### Config API (`internal/config/config.go`)
@@ -199,6 +334,26 @@ config.Init()  // Creates default config
 2. Implement `EnhanceProduct()` method
 3. Add to config and `initSources()`
 
+### Set up database backend
+1. Install PostgreSQL and create `badops` database
+2. Set environment variables: `POSTGRES_USER`, `POSTGRES_PASSWORD`
+3. Run `badops db init` to create schema
+4. Run `badops db migrate --from-state` to import existing data
+5. Run `badops config set database.use_db true`
+
+### Import competitor prices
+1. Export CSV from Reprice with competitor columns
+2. Run `badops prices import <csv-file>`
+3. View results: `badops competitors stats`
+4. Check specific product: `badops prices check --sku CO-T309012`
+
+### Set up analytics
+1. Install ClickHouse and create `badops` database
+2. Set environment variables: `CLICKHOUSE_USERNAME`, `CLICKHOUSE_PASSWORD`
+3. Run `badops analytics init` to create schema
+4. Run `badops analytics sync --all` to sync historical data
+5. Query trends: `badops analytics trends --sku CO-T309012 --period 30d`
+
 ## API Integrations
 
 ### Shopify Admin API
@@ -224,6 +379,10 @@ config.Init()  // Creates default config
 | `SHOPIFY_API_KEY` | For import | Shopify Admin API token |
 | `NOBB_USERNAME` | For NOBB | NOBB API username |
 | `NOBB_PASSWORD` | For NOBB | NOBB API password |
+| `POSTGRES_USER` | For database | PostgreSQL username |
+| `POSTGRES_PASSWORD` | For database | PostgreSQL password |
+| `CLICKHOUSE_USERNAME` | For analytics | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | For analytics | ClickHouse password |
 
 ## Test Data
 
@@ -241,10 +400,15 @@ github.com/schollz/progressbar/v3   # Progress bars
 github.com/olekukonko/tablewriter   # ASCII tables
 github.com/disintegration/imaging   # Image processing
 gopkg.in/yaml.v3                    # YAML config
+github.com/jackc/pgx/v5             # PostgreSQL driver
+github.com/golang-migrate/migrate   # SQL migrations
+github.com/ClickHouse/clickhouse-go # ClickHouse driver
+github.com/google/uuid              # UUID generation
 ```
 
 ## Command Reference
 
+### Configuration & Sources
 | Command | Description |
 |---------|-------------|
 | `config init` | Create config file |
@@ -252,6 +416,10 @@ gopkg.in/yaml.v3                    # YAML config
 | `config set <key> <value>` | Set config value |
 | `sources list` | List available connectors |
 | `sources test [name]` | Test connectivity |
+
+### Products & Enhancement
+| Command | Description |
+|---------|-------------|
 | `products import --source shopify` | Import from Shopify |
 | `products parse <csv>` | Parse Matrixify CSV |
 | `products list` | List products in state |
@@ -261,9 +429,44 @@ gopkg.in/yaml.v3                    # YAML config
 | `enhance apply` | Apply approved |
 | `export run --dest <dest>` | Export products |
 | `export list` | List destinations |
+
+### Images
+| Command | Description |
+|---------|-------------|
 | `images compare` | Compare image counts |
 | `images fetch` | Download images |
 | `images resize` | Resize to square |
+
+### Database Management
+| Command | Description |
+|---------|-------------|
+| `db init` | Create PostgreSQL schema |
+| `db status` | Show database health and table stats |
+| `db migrate --from-state [path]` | Migrate JSON state to database |
+
+### Price Tracking
+| Command | Description |
+|---------|-------------|
+| `prices import <csv>` | Import Reprice CSV export |
+| `prices check --sku <sku>` | Check competitor prices for product |
+| `prices summary` | Show price data overview |
+
+### Competitor Management
+| Command | Description |
+|---------|-------------|
+| `competitors list` | List all tracked competitors |
+| `competitors add <name>` | Add new competitor |
+| `competitors stats` | Show coverage statistics |
+| `competitors remove <name>` | Remove competitor and data |
+
+### Analytics
+| Command | Description |
+|---------|-------------|
+| `analytics init` | Initialize ClickHouse schema |
+| `analytics sync [--all\|--days N]` | Sync PostgreSQL to ClickHouse |
+| `analytics trends --sku <sku>` | Show price trends over time |
+| `analytics position --sku <sku>` | Analyze market position |
+| `analytics alerts --threshold N` | Find products above/below market |
 
 ## Backward Compatibility
 
