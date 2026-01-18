@@ -1,21 +1,23 @@
-# Bad.no Operations Terminal (badops)
+# Bad.no Product Operations (badops)
 
-CLI tool for Bad.no's product operations team to enhance product images by fetching high-quality photos from supplier catalogs.
+A multi-source product enhancement platform for Bad.no's operations team. Import products from Shopify, enhance them with data from NOBB and Tiger.nl, and export to multiple destinations.
 
-## Overview
+## Features
 
-Bad.no sells Tiger bathroom accessories. This tool automates the process of:
-1. Parsing product exports from Shopify (Matrixify format)
-2. Matching products against Tiger.nl's official catalog
-3. Comparing image counts (bad.no vs Tiger.nl)
-4. Downloading missing/new images from Tiger.nl
-5. Resizing images to square format for Shopify
+- **Multi-Source Import**: Pull products directly from Shopify or parse CSV exports
+- **Product Enhancement**: Enrich products with images from Tiger.nl and specifications from NOBB
+- **Flexible Export**: Output to Matrixify CSV, JSON, Shopify API, or ClickHouse
+- **State Management**: Track enhancement history and product status
+- **Backward Compatible**: Existing workflows continue to work
 
 ## Installation
 
 ```bash
-# Clone and build
-cd /Users/ermankuplu/Building/bad-no-ops
+# Clone the repository
+git clone https://github.com/analyzify/badno-product-ops.git
+cd badno-product-ops
+
+# Build
 go build -o badops ./cmd/badops
 
 # Or install globally
@@ -24,149 +26,290 @@ go install ./cmd/badops
 
 ## Quick Start
 
+### Option 1: Import from Shopify (New)
+
+```bash
+# 1. Configure your API key
+export SHOPIFY_API_KEY=your_api_key_here
+
+# 2. Import products from Shopify
+./badops products import --source shopify --vendor Tiger
+
+# 3. Enhance with Tiger.nl images
+./badops enhance run --source tiger_nl
+
+# 4. Export to Matrixify CSV
+./badops export run --dest csv --format matrixify
+```
+
+### Option 2: Parse CSV (Legacy)
+
 ```bash
 # 1. Parse your Matrixify export
-./badops products parse testdata/tiger-sample.csv
+./badops products parse exports/tiger-products.csv
 
-# 2. Match products against Tiger.nl
+# 2. Match and enhance
 ./badops products match
-
-# 3. Compare image counts (bad.no vs Tiger.nl)
 ./badops images compare
-
-# 4. Download only NEW images (not already on bad.no)
 ./badops images fetch --new-only --limit 20
 
-# 5. Resize to square format
+# 3. Resize images
 ./badops images resize --size 800
 ```
 
 ## Commands
 
+### Configuration
+
+```bash
+# Initialize config file (~/.badops/config.yaml)
+./badops config init
+
+# Show current configuration
+./badops config show
+
+# Set a config value
+./badops config set sources.shopify.store mystore
+
+# Get a config value
+./badops config get sources.shopify.store
+```
+
+### Sources
+
+```bash
+# List available data sources
+./badops sources list
+
+# Test connection to a source
+./badops sources test shopify
+./badops sources test nobb
+
+# Show source details
+./badops sources info tiger_nl
+```
+
 ### Products
 
-#### `badops products parse <csv-file>`
-Parse a Matrixify CSV export from Shopify.
-
 ```bash
+# Import from Shopify (requires SHOPIFY_API_KEY)
+./badops products import --source shopify --vendor Tiger --limit 100
+
+# Parse CSV file (legacy)
 ./badops products parse exports/tiger-products.csv
+
+# List products in state
+./badops products list
+
+# Match products against Tiger.nl
+./badops products match
+
+# Look up a single SKU
+./badops products lookup CO-T309012
 ```
 
-**Input CSV format:**
-```csv
-Handle,Title,Vendor,Image Src
-CO-T309012,Tiger Boston Toalettrullholder RVS,Tiger,https://cdn.shopify.com/...
-```
-
-**Output:**
-- Displays product table with SKU, name, and image count
-- Shows products missing images (highlighted in red)
-- Saves state to `output/.badops-state.json` for next commands
-
-#### `badops products match`
-Match parsed products against Tiger.nl catalog.
+### Enhance
 
 ```bash
-./badops products match
-```
+# Enhance products with Tiger.nl images
+./badops enhance run --source tiger_nl
 
-**Output:**
-- Match confidence scores (0-100%)
-- Status: `matched` (>70%), `review` (50-70%), `no match` (<50%)
-- Saves report to `output/report.json`
+# Enhance with NOBB data (requires NOBB_USERNAME and NOBB_PASSWORD)
+./badops enhance run --source nobb
+
+# Enhance with multiple sources
+./badops enhance run --source tiger_nl,nobb
+
+# Dry run (preview without changes)
+./badops enhance run --source tiger_nl --dry-run
+
+# Review pending enhancements
+./badops enhance review
+
+# Apply approved enhancements
+./badops enhance apply
+```
 
 ### Images
 
-#### `badops images compare`
-Compare image counts between bad.no and Tiger.nl.
-
 ```bash
+# Compare image counts (bad.no vs Tiger.nl)
 ./badops images compare
-```
 
-**Output:**
-```
-SKU        | Product                    | Bad.no | Tiger.nl | New
------------+----------------------------+--------+----------+-----
-CO-T309012 | Tiger Boston Toalettrul... |      1 |       19 | +18
-CO-T309512 | Tiger Boston krok matt...  |      0 |       19 | +19
-```
-
-#### `badops images fetch`
-Download images from Tiger.nl.
-
-```bash
-# Download demo images (hardcoded URLs)
-./badops images fetch --limit 5
-
-# Download only NEW images not on bad.no
+# Download new images from Tiger.nl
 ./badops images fetch --new-only --limit 20
+
+# Resize images to square format
+./badops images resize --size 800
 ```
 
-**Flags:**
-- `--limit, -l` - Limit number of images to download (0 = all)
-- `--new-only` - Only download images not already on bad.no
-
-**Output files:**
-- `output/originals/{SKU}.jpg` - Original product image
-- `output/originals/{SKU}_new_{N}.jpg` - New images from Tiger.nl
-
-#### `badops images resize`
-Resize images to square format with center-crop.
+### Export
 
 ```bash
-./badops images resize --size 800
-./badops images resize --size 2000
+# List available export destinations
+./badops export list
+
+# Export to Matrixify CSV
+./badops export run --dest csv --format matrixify
+
+# Export to JSON
+./badops export run --dest json
+
+# Export only enhanced products
+./badops export run --dest csv --enhanced-only
+
+# Dry run
+./badops export run --dest csv --dry-run
+
+# Custom output path
+./badops export run --dest csv -o my-products.csv
 ```
 
-**Flags:**
-- `--size, -s` - Target size in pixels (default: 800)
+## Configuration
 
-**Output:**
-- `output/resized/{size}/{filename}.jpg`
+### Config File
 
-## Output Structure
+Create with `badops config init` at `~/.badops/config.yaml`:
 
+```yaml
+sources:
+  shopify:
+    store: badno
+    api_key_env: SHOPIFY_API_KEY
+  nobb:
+    username_env: NOBB_USERNAME
+    password_env: NOBB_PASSWORD
+  tiger_nl:
+    rate_limit_ms: 150
+
+outputs:
+  shopify:
+    store: badno
+    api_key_env: SHOPIFY_API_KEY
+  clickhouse:
+    host: localhost
+    port: 9000
+    database: products
+  file:
+    output_dir: ./output
+    pretty: true
+
+defaults:
+  vendor: Tiger
+  enhance_sources:
+    - tiger_nl
+    - nobb
+  export_format: matrixify
 ```
-output/
-├── originals/              # Downloaded full-size images
-│   ├── CO-T309012.jpg      # Original product image
-│   ├── CO-T309012_new_1.jpg # New image #1 from Tiger.nl
-│   ├── CO-T309012_new_2.jpg # New image #2 from Tiger.nl
-│   └── ...
-├── resized/
-│   └── 800/                # Resized to 800x800
-│       ├── CO-T309012.jpg
-│       └── ...
-├── report.json             # Match results and statistics
-└── .badops-state.json      # Internal state between commands
-```
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `SHOPIFY_API_KEY` | Shopify Admin API access token |
+| `NOBB_USERNAME` | NOBB API username |
+| `NOBB_PASSWORD` | NOBB API password |
+| `CLICKHOUSE_USERNAME` | ClickHouse username (optional) |
+| `CLICKHOUSE_PASSWORD` | ClickHouse password (optional) |
 
 ## Architecture
 
 ```
-bad-no-ops/
-├── cmd/badops/
-│   ├── main.go             # Entry point
-│   └── cmd/
-│       ├── root.go         # Root command with ASCII banner
-│       ├── products.go     # products parse/match commands
-│       └── images.go       # images compare/fetch/resize commands
+badno-product-ops/
+├── cmd/badops/cmd/
+│   ├── root.go         # CLI setup, ASCII banner
+│   ├── config.go       # config init|show|set|get
+│   ├── sources.go      # sources list|test|info
+│   ├── products.go     # products import|parse|list|match|lookup
+│   ├── enhance.go      # enhance run|review|apply
+│   ├── export.go       # export run|list
+│   └── images.go       # images compare|fetch|resize
+│
 ├── internal/
-│   ├── parser/
-│   │   └── matrixify.go    # CSV parser for Shopify exports
-│   ├── matcher/
-│   │   ├── tiger.go        # Product matching logic
-│   │   └── scraper.go      # Tiger.nl web scraper
-│   └── images/
-│       ├── fetcher.go      # Image downloader
-│       └── resizer.go      # Center-crop resize logic
-├── pkg/models/
-│   └── product.go          # Data structures
-├── testdata/
-│   └── tiger-sample.csv    # Sample test data
-└── output/                 # Generated files
+│   ├── source/                    # Source connectors
+│   │   ├── connector.go           # Connector interface
+│   │   ├── registry.go            # Connector registry
+│   │   ├── shopify/connector.go   # Shopify import
+│   │   ├── nobb/connector.go      # NOBB enhancement
+│   │   └── tiger/connector.go     # Tiger.nl images
+│   │
+│   ├── output/                    # Output adapters
+│   │   ├── adapter.go             # Adapter interface
+│   │   ├── registry.go            # Adapter registry
+│   │   ├── file/csv.go            # CSV export
+│   │   ├── file/json.go           # JSON export
+│   │   ├── shopify/adapter.go     # Shopify API
+│   │   └── clickhouse/adapter.go  # ClickHouse
+│   │
+│   ├── state/store.go             # State management
+│   ├── config/config.go           # Configuration
+│   ├── orchestrator/orchestrator.go # Pipeline coordinator
+│   │
+│   ├── parser/matrixify.go        # CSV parsing
+│   ├── matcher/                   # Tiger.nl matching
+│   │   ├── tiger.go
+│   │   ├── scraper.go
+│   │   └── skumapper.go
+│   └── images/                    # Image processing
+│       ├── fetcher.go
+│       └── resizer.go
+│
+├── pkg/models/product.go          # Data models
+└── testdata/                      # Sample data
 ```
+
+## Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLI Commands (Cobra)                          │
+│  config | sources | products | enhance | images | export         │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│                   State Store (v2)                               │
+│  Products map + History + Auto-migration from v1                 │
+└─────────────────────────────────────────────────────────────────┘
+         │                                           │
+┌────────▼────────────┐                 ┌───────────▼───────────┐
+│  Source Connectors  │                 │   Output Adapters     │
+│  • Shopify (import) │                 │   • CSV (Matrixify)   │
+│  • NOBB (enhance)   │                 │   • JSON/JSONL        │
+│  • Tiger.nl (images)│                 │   • Shopify API       │
+└─────────────────────┘                 │   • ClickHouse        │
+                                        └───────────────────────┘
+```
+
+## State File
+
+Products are stored in `output/.badops-state.json` (v2 format):
+
+```json
+{
+  "version": "2.0",
+  "products": {
+    "CO-T309012": {
+      "sku": "CO-T309012",
+      "title": "Tiger Boston Toalettrullholder",
+      "vendor": "Tiger",
+      "images": [...],
+      "enhancements": [...],
+      "status": "enhanced"
+    }
+  },
+  "history": [
+    {
+      "timestamp": "2024-01-15T10:30:00Z",
+      "action": "import",
+      "source": "shopify",
+      "count": 179
+    }
+  ],
+  "last_updated": "2024-01-15T10:30:00Z"
+}
+```
+
+Legacy v1 state files are automatically migrated on first load.
 
 ## Dependencies
 
@@ -177,70 +320,69 @@ bad-no-ops/
 | `github.com/schollz/progressbar/v3` | Progress bars |
 | `github.com/olekukonko/tablewriter` | ASCII tables |
 | `github.com/disintegration/imaging` | Image processing |
+| `gopkg.in/yaml.v3` | YAML config parsing |
 
-## Configuration
+## Workflow Examples
 
-Currently all configuration is via command-line flags. Future versions may support:
-- Config file (`~/.badops.yaml`)
-- Environment variables
-- Rate limiting settings
-
-## Tiger.nl Integration
-
-See [docs/TIGER-NL.md](docs/TIGER-NL.md) for detailed documentation on:
-- URL structure and patterns
-- Image API endpoints
-- Scraping methodology
-- Known limitations
-
-## Workflow Example
-
-### Full workflow for updating Tiger product images:
+### Full Enhancement Pipeline
 
 ```bash
-# 1. Export Tiger products from Shopify using Matrixify
-#    Filter: Vendor = "Tiger"
-#    Download as CSV
+# 1. Set up credentials
+export SHOPIFY_API_KEY=shpat_xxxxx
+export NOBB_USERNAME=myuser
+export NOBB_PASSWORD=mypass
 
-# 2. Parse the export
-./badops products parse ~/Downloads/tiger-export.csv
-# Output: "Parsed 179 products, 45 missing images"
+# 2. Import Tiger products from Shopify
+./badops products import --source shopify --vendor Tiger
+# Output: "Imported 179 products from Shopify"
 
-# 3. Match against Tiger.nl
-./badops products match
-# Output: "Matched 156/179 products (87%)"
+# 3. Enhance with Tiger.nl images
+./badops enhance run --source tiger_nl
+# Output: "Enhanced 156 products, added 892 images"
 
-# 4. Compare image counts
-./badops images compare
-# Output: "Found 892 new images across 179 products"
+# 4. Enhance with NOBB specifications
+./badops enhance run --source nobb
+# Output: "Enhanced 142 products, updated 568 fields"
 
-# 5. Download new images (in batches)
-./badops images fetch --new-only --limit 50
-# Output: "Downloaded 47 NEW images to output/originals/"
+# 5. Review enhancements
+./badops enhance review
+# Shows table of enhanced products
 
-# 6. Resize for Shopify
-./badops images resize --size 800
-# Output: "Resized 47 images to output/resized/800/"
+# 6. Export to Matrixify format
+./badops export run --dest csv --format matrixify -o tiger-enhanced.csv
+# Output: "Exported 179 products to tiger-enhanced.csv"
 
-# 7. Upload to Shopify via Matrixify or manual upload
+# 7. Upload tiger-enhanced.csv to Shopify via Matrixify
 ```
 
-## Known Limitations
+### Quick Image Update (Legacy)
 
-1. **Rate Limiting**: No built-in rate limiting for Tiger.nl requests
-2. **Image Deduplication**: Compares by count, not by visual similarity
-3. **Series Matching**: Some product series (2-Store, Carv) have lower match rates
-4. **Manual Review**: Products with <70% match confidence need manual verification
+```bash
+# Parse → Match → Compare → Fetch → Resize
+./badops products parse ~/Downloads/tiger-export.csv
+./badops products match
+./badops images compare
+./badops images fetch --new-only --limit 50
+./badops images resize --size 800
+```
 
-## Future Improvements
+## API Integrations
 
-- [ ] Add `--dry-run` flag to preview without downloading
-- [ ] Implement visual image deduplication (perceptual hashing)
-- [ ] Add rate limiting and retry logic
-- [ ] Support for other suppliers (not just Tiger.nl)
-- [ ] Direct Shopify upload via API
-- [ ] Web UI for manual review queue
+### Shopify Admin API
+- Uses REST Admin API (2024-01)
+- Requires access token with `read_products` and `write_products` scopes
+- Supports pagination for large catalogs
+
+### NOBB API
+- Endpoint: `https://export.byggtjeneste.no/api`
+- Basic Auth authentication
+- Fetches: items, properties, suppliers, packages
+
+### Tiger.nl
+- Web scraping with rate limiting (150ms default)
+- Image URLs: `https://tiger.nl/pim/528_{UUID}?width=1200&height=1200`
+- Results cached for 24 hours
 
 ## License
 
-Internal tool for Bad.no AS. Not for public distribution.
+Internal tool for Bad.no AS / Analyzify. Not for public distribution.
